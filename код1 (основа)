@@ -49,7 +49,7 @@ class QuestionPopup(Popup):
                (self.correct_answer[0] == '-' and self.correct_answer[1:].replace('.', '').isdigit()):
                 user_num = float(user_answer)
                 correct_num = float(self.correct_answer)
-                if abs(user_num - correct_num) < 0.0001:  # Сравнение с плавающей точкой
+                if abs(user_num - correct_num) < 0.0001:
                     self.dismiss()
                     self.on_correct()
                 else:
@@ -114,6 +114,7 @@ class GameBoard(Widget):
     
     def generate_question_cells(self):
         # Добавляем клетки с вопросами
+        self.question_cells = []  # Очищаем перед добавлением
         for (x, y), (question, answer) in self.questions.items():
             if [x, y] != self.player_pos and [x, y] != self.target_pos:
                 self.question_cells.append([x, y])
@@ -126,11 +127,9 @@ class GameBoard(Widget):
                 for y in range(self.board_size):
                     # Цвет клетки
                     if [x, y] in self.obstacles:
-                        Color(0.5, 0.2, 0.2, 1)  # Красный для препятствий
+                        Color(0.5, 0.2, 0.2, 1)  # Бордовый для препятствий
                     elif [x, y] == self.target_pos:
                         Color(0.2, 0.7, 0.2, 1)  # Зеленый для цели
-                    elif [x, y] in self.question_cells:
-                        Color(0.9, 0.8, 0.2, 1)  # Желтый для клеток с вопросами
                     else:
                         Color(0.9, 0.9, 0.9, 1)  # Светло-серый для обычных клеток
                     
@@ -149,16 +148,6 @@ class GameBoard(Widget):
                         self.x + x * self.cell_size,
                         self.y + y * self.cell_size
                     ), size=(1, self.cell_size))  # левая граница
-                    
-                    # Добавляем знак вопроса на клетки с вопросами
-                    if [x, y] in self.question_cells:
-                        # Рисуем простой знак вопроса
-                        Color(0, 0, 0, 1)
-                        # Здесь можно добавить текст, но для простоты используем прямоугольник поменьше
-                        Rectangle(pos=(
-                            self.x + x * self.cell_size + self.cell_size // 2 - 5,
-                            self.y + y * self.cell_size + self.cell_size // 2 - 5
-                        ), size=(10, 10))
             
             # Рисуем игрока
             Color(0.2, 0.4, 0.8, 1)  # Синий для игрока
@@ -199,7 +188,7 @@ class GameBoard(Widget):
                     self.update_canvas()
                     if on_question_correct:
                         on_question_correct()
-                    if self.player_pos == self.target_pos and on_question_correct:
+                    if self.player_pos == self.target_pos:
                         on_question_correct(True)
                 
                 def on_wrong():
@@ -218,8 +207,9 @@ class GameBoard(Widget):
                 self.update_canvas()
                 
                 # Проверяем достижение цели
-                if self.player_pos == self.target_pos and on_question_correct:
-                    on_question_correct(True)
+                if self.player_pos == self.target_pos:
+                    if on_question_correct:
+                        on_question_correct(True)
                 return True
         return False
 
@@ -259,10 +249,12 @@ class WalkGame(App):
         buttons_layout.add_widget(down_btn)
         
         # Информационная панель
-        info_layout = BoxLayout(orientation='vertical', size_hint=(0.7, 1))
-        self.moves_label = Label(text='Ходы: 0', font_size=18)
-        self.wrong_label = Label(text='Ошибок: 0', font_size=16)
-        self.status_label = Label(text='Дойди до зеленой клетки! Ответь на вопросы, чтобы пройти', font_size=12)
+        info_layout = BoxLayout(orientation='vertical', size_hint=(0.7, 1), spacing=5)
+        
+        # Добавляем счетчики обратно
+        self.moves_label = Label(text='Ходы: 0', font_size=16)
+        self.wrong_label = Label(text='Ошибок: 0', font_size=14, color=(0.8, 0.2, 0.2, 1))
+        self.status_label = Label(text='Дойди до зеленой клетки!', font_size=12)
         
         info_layout.add_widget(self.moves_label)
         info_layout.add_widget(self.wrong_label)
@@ -291,7 +283,7 @@ class WalkGame(App):
         def on_wrong_answer():
             self.wrong_answers += 1
             self.wrong_label.text = f'Ошибок: {self.wrong_answers}'
-            self.status_label.text = f'Неправильный ответ! Возвращены на старт. Ошибок: {self.wrong_answers}'
+            self.status_label.text = f'Неправильный ответ! Возвращены на старт.'
             self.moves_count += 1
             self.moves_label.text = f'Ходы: {self.moves_count}'
         
@@ -303,7 +295,8 @@ class WalkGame(App):
                       auto_dismiss=False)
         
         layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
-        message = Label(text=f'Вы выиграли!\nХодов: {self.moves_count}\nОшибок: {self.wrong_answers}')
+        message = Label(text=f'Вы выиграли!\n\nХодов: {self.moves_count}\nОшибок: {self.wrong_answers}\n\nОтличная работа!', 
+                       font_size=16, halign='center')
         restart_btn = Button(text='Играть снова', size_hint=(1, 0.3))
         restart_btn.bind(on_press=lambda x: self.restart_game(popup))
         
