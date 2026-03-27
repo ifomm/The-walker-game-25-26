@@ -17,34 +17,28 @@ class QuestionPopup(Popup):
         self.on_wrong = on_wrong
         self.title = 'Вопрос'
         self.size_hint = (0.8, 0.5)
+        self.auto_dismiss = False
         
         layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
         
         # Вопрос
-        self.question_label = Label(text=question, font_size=16, size_hint=(1, 0.3))
+        self.question_label = Label(text=question, font_size=16, size_hint=(1, 0.4))
         layout.add_widget(self.question_label)
         
         # Поле для ответа
         self.answer_input = TextInput(hint_text='Введите ответ', multiline=False, font_size=14)
         layout.add_widget(self.answer_input)
         
-        # Кнопки
-        buttons_layout = BoxLayout(size_hint=(1, 0.3), spacing=10)
-        submit_btn = Button(text='Ответить', font_size=14)
+        # Кнопка ответить (без кнопки отмена)
+        submit_btn = Button(text='Ответить', font_size=16, size_hint=(1, 0.2))
         submit_btn.bind(on_press=self.check_answer)
-        cancel_btn = Button(text='Отмена', font_size=14)
-        cancel_btn.bind(on_press=self.dismiss)
-        
-        buttons_layout.add_widget(submit_btn)
-        buttons_layout.add_widget(cancel_btn)
-        layout.add_widget(buttons_layout)
+        layout.add_widget(submit_btn)
         
         self.content = layout
     
     def check_answer(self, instance):
         user_answer = self.answer_input.text.strip()
         try:
-            # Пробуем преобразовать ответ в число, если это возможно
             if self.correct_answer.replace('.', '').replace('-', '').isdigit() or \
                (self.correct_answer[0] == '-' and self.correct_answer[1:].replace('.', '').isdigit()):
                 user_num = float(user_answer)
@@ -56,7 +50,6 @@ class QuestionPopup(Popup):
                     self.dismiss()
                     self.on_wrong()
             else:
-                # Сравниваем строки (игнорируем регистр)
                 if user_answer.lower() == self.correct_answer.lower():
                     self.dismiss()
                     self.on_correct()
@@ -64,7 +57,6 @@ class QuestionPopup(Popup):
                     self.dismiss()
                     self.on_wrong()
         except ValueError:
-            # Если не число, сравниваем строки
             if user_answer.lower() == self.correct_answer.lower():
                 self.dismiss()
                 self.on_correct()
@@ -80,22 +72,36 @@ class GameBoard(Widget):
         self.player_pos = [0, 0]
         self.target_pos = [7, 7]
         self.obstacles = []
-        self.question_cells = []  # Клетки с вопросами
-        self.questions = {
+        self.question_cells = []
+        
+        # Банк вопросов
+        self.questions_bank = {
             # Математика
-            (0, 1): ("Сколько будет 15 * 8?", "120"),
-            (2, 3): ("Чему равен квадратный корень из 144?", "12"),
-            (4, 2): ("Решите уравнение: 3x + 5 = 20", "5"),
-            (5, 5): ("Вычислите: 2^6", "64"),
-            (1, 6): ("Сколько градусов в прямом угле?", "90"),
+            "Сколько будет 15 * 8?": "120",
+            "Чему равен квадратный корень из 144?": "12",
+            "Решите уравнение: 3x + 5 = 20": "5",
+            "Вычислите: 2^6": "64",
+            "Сколько градусов в прямом угле?": "90",
+            "Чему равно 12 * 12?": "144",
+            "Сколько будет 7 * 8?": "56",
+            "Найдите 20% от 50": "10",
+            "Сколько будет 25 * 4?": "100",
+            "Чему равен корень из 81?": "9",
             
             # Физика
-            (3, 4): ("Формула закона Ома? (введите формулу)", "I=U/R"),
-            (6, 2): ("Ускорение свободного падения на Земле (м/с²)?", "9.8"),
-            (4, 6): ("Сколько секунд в одной минуте?", "60"),
-            (2, 5): ("Что тяжелее: 1 кг пуха или 1 кг железа?", "одинаково"),
-            (6, 5): ("Какая планета ближе всех к Солнцу?", "Меркурий"),
+            "Формула закона Ома? (введите формулу)": "I=U/R",
+            "Ускорение свободного падения на Земле (м/с²)?": "9.8",
+            "Сколько секунд в одной минуте?": "60",
+            "Что тяжелее: 1 кг пуха или 1 кг железа?": "одинаково",
+            "Какая планета ближе всех к Солнцу?": "Меркурий",
+            "Сколько минут в одном часе?": "60",
+            "Какая сила измеряется в Ньютонах?": "сила",
+            "Какой газ выделяют растения при фотосинтезе?": "кислород",
+            "Сколько дней в високосном году?": "366",
+            "Чему равна скорость света (км/с)?": "300000",
         }
+        
+        self.current_questions = {}
         self.generate_obstacles()
         self.generate_question_cells()
         self.waiting_for_answer = False
@@ -103,39 +109,68 @@ class GameBoard(Widget):
         self.bind(pos=self.update_canvas, size=self.update_canvas)
     
     def generate_obstacles(self):
-        # Генерируем случайные препятствия (увеличил количество)
         self.obstacles = []
-        num_obstacles = 12  # Увеличил с 8 до 12
+        num_obstacles = 12
         for _ in range(num_obstacles):
             x = random.randint(0, self.board_size - 1)
             y = random.randint(0, self.board_size - 1)
-            # Убедимся, что препятствие не на старте, не на финише и не на клетке с вопросом
             if ([x, y] != self.player_pos and 
-                [x, y] != self.target_pos and 
-                (x, y) not in self.questions and
+                [x, y] != self.target_pos and
                 [x, y] not in self.obstacles):
                 self.obstacles.append([x, y])
     
     def generate_question_cells(self):
-        # Добавляем клетки с вопросами
+        # Создаем новые случайные клетки с вопросами
         self.question_cells = []
-        for (x, y), (question, answer) in self.questions.items():
-            if [x, y] != self.player_pos and [x, y] != self.target_pos:
-                self.question_cells.append([x, y])
+        self.current_questions = {}
+        
+        available_questions = list(self.questions_bank.items())
+        random.shuffle(available_questions)
+        
+        num_questions = random.randint(8, 12)
+        attempts = 0
+        
+        while len(self.question_cells) < num_questions and attempts < 100:
+            x = random.randint(0, self.board_size - 1)
+            y = random.randint(0, self.board_size - 1)
+            
+            if ([x, y] != self.player_pos and 
+                [x, y] != self.target_pos and 
+                [x, y] not in self.obstacles and
+                [x, y] not in self.question_cells):
+                
+                if len(available_questions) > 0:
+                    question, answer = available_questions.pop(0)
+                    self.question_cells.append([x, y])
+                    self.current_questions[(x, y)] = (question, answer)
+            
+            attempts += 1
+        
+        if len(self.question_cells) < 5:
+            for i in range(5 - len(self.question_cells)):
+                x = random.randint(0, self.board_size - 1)
+                y = random.randint(0, self.board_size - 1)
+                if ([x, y] != self.player_pos and 
+                    [x, y] != self.target_pos and 
+                    [x, y] not in self.obstacles and
+                    [x, y] not in self.question_cells):
+                    question, answer = list(self.questions_bank.items())[i % len(self.questions_bank)]
+                    self.question_cells.append([x, y])
+                    self.current_questions[(x, y)] = (question, answer)
     
     def update_canvas(self, *args):
         self.canvas.clear()
         with self.canvas:
-            # Рисуем сетку
+            # Рисуем сетку - все клетки одного цвета, кроме препятствий и цели
             for x in range(self.board_size):
                 for y in range(self.board_size):
-                    # Цвет клетки
+                    # Цвет клетки (все обычные клетки одинаковые)
                     if [x, y] in self.obstacles:
                         Color(0.5, 0.2, 0.2, 1)  # Бордовый для препятствий
                     elif [x, y] == self.target_pos:
                         Color(0.2, 0.7, 0.2, 1)  # Зеленый для цели
                     else:
-                        Color(0.9, 0.9, 0.9, 1)  # Светло-серый для обычных клеток
+                        Color(0.9, 0.9, 0.9, 1)  # Светло-серый для всех остальных клеток
                     
                     Rectangle(pos=(
                         self.x + x * self.cell_size,
@@ -147,22 +182,22 @@ class GameBoard(Widget):
                     Rectangle(pos=(
                         self.x + x * self.cell_size,
                         self.y + y * self.cell_size
-                    ), size=(self.cell_size, 1))  # нижняя граница
+                    ), size=(self.cell_size, 1))
                     Rectangle(pos=(
                         self.x + x * self.cell_size,
                         self.y + y * self.cell_size
-                    ), size=(1, self.cell_size))  # левая граница
+                    ), size=(1, self.cell_size))
             
-            # Рисуем игрока (КРУГЛЫЙ)
-            Color(0.2, 0.4, 0.8, 1)  # Синий для игрока
+            # Рисуем игрока (круглый)
+            Color(0.2, 0.4, 0.8, 1)
             Ellipse(pos=(
                 self.x + self.player_pos[0] * self.cell_size + 5,
                 self.y + self.player_pos[1] * self.cell_size + 5
             ), size=(self.cell_size - 10, self.cell_size - 10))
     
     def ask_question(self, pos, on_correct, on_wrong):
-        if tuple(pos) in self.questions:
-            question, answer = self.questions[tuple(pos)]
+        if tuple(pos) in self.current_questions:
+            question, answer = self.current_questions[tuple(pos)]
             popup = QuestionPopup(question, answer, on_correct, on_wrong)
             popup.open()
             return True
@@ -175,13 +210,10 @@ class GameBoard(Widget):
         new_x = self.player_pos[0] + dx
         new_y = self.player_pos[1] + dy
         
-        # Проверяем границы доски
         if 0 <= new_x < self.board_size and 0 <= new_y < self.board_size:
-            # Проверяем препятствия
             if [new_x, new_y] in self.obstacles:
                 return False
             
-            # Проверяем, есть ли вопрос на клетке
             if [new_x, new_y] in self.question_cells:
                 self.waiting_for_answer = True
                 self.pending_move = [new_x, new_y]
@@ -196,7 +228,6 @@ class GameBoard(Widget):
                         on_question_correct(True)
                 
                 def on_wrong():
-                    # Возвращаем на старт
                     self.player_pos = [0, 0]
                     self.waiting_for_answer = False
                     self.update_canvas()
@@ -206,11 +237,9 @@ class GameBoard(Widget):
                 self.ask_question([new_x, new_y], on_correct, on_wrong)
                 return False
             else:
-                # Обычное перемещение без вопросов
                 self.player_pos = [new_x, new_y]
                 self.update_canvas()
                 
-                # Проверяем достижение цели
                 if self.player_pos == self.target_pos:
                     if on_question_correct:
                         on_question_correct(True)
@@ -224,13 +253,10 @@ class WalkGame(App):
         self.wrong_answers = 0
         
     def build(self):
-        # Главный layout
         main_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
         
-        # Панель управления
         control_layout = BoxLayout(orientation='horizontal', size_hint=(1, 0.2))
         
-        # Кнопки движения
         buttons_layout = BoxLayout(orientation='vertical', size_hint=(0.3, 1))
         
         up_btn = Button(text='↑', font_size=20)
@@ -252,7 +278,6 @@ class WalkGame(App):
         buttons_layout.add_widget(middle_layout)
         buttons_layout.add_widget(down_btn)
         
-        # Информационная панель
         info_layout = BoxLayout(orientation='vertical', size_hint=(0.7, 1), spacing=5)
         
         self.moves_label = Label(text='Ходы: 0', font_size=16)
@@ -266,7 +291,6 @@ class WalkGame(App):
         control_layout.add_widget(buttons_layout)
         control_layout.add_widget(info_layout)
         
-        # Игровое поле
         self.game_board = GameBoard(size_hint=(1, 0.8))
         
         main_layout.add_widget(control_layout)
@@ -286,9 +310,9 @@ class WalkGame(App):
         def on_wrong_answer():
             self.wrong_answers += 1
             self.wrong_label.text = f'Ошибок: {self.wrong_answers}'
-            self.status_label.text = f'Неправильный ответ! Возвращены на старт.'
+        
             self.moves_count += 1
-            self.moves_label.text = f'Ходы: {self.moves_count}'
+         
         
         self.game_board.move_player(dx, dy, on_move_success, on_wrong_answer)
     
